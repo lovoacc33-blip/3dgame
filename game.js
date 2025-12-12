@@ -3,21 +3,19 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 
-// --- Game Constants ---
-const LANE_WIDTH = 5;       
+// --- Game Constants (High Speed) ---
+const LANE_WIDTH = 6;       
 const LANES = [-LANE_WIDTH, 0, LANE_WIDTH]; 
-const PLAYER_RUN_HEIGHT = 1.5; 
-const JUMP_HEIGHT = 4.5;
-const JUMP_DURATION = 0.5; 
-const SLIDE_HEIGHT = 0.5; 
-const COLLISION_SLIDE_HEIGHT = 1; 
-const RUN_SPEED_BASE = 15; 
-const RUN_SPEED_INCREASE = 0.5; 
-const OBSTACLE_SPAWN_Z = -200; 
+const PLAYER_RUN_HEIGHT = 1.0; 
+const JUMP_HEIGHT = 5.0;
+const JUMP_DURATION = 0.4; 
+const SLIDE_HEIGHT = 0.3; 
+const COLLISION_SLIDE_HEIGHT = 0.8; 
+const RUN_SPEED_BASE = 30; // High Speed
+const RUN_SPEED_INCREASE = 1.0; 
+const OBSTACLE_SPAWN_Z = -300; 
 const OBSTACLE_CULL_Z = 10;    
-
-// Progression Timing: (15 units/sec * 30 seconds = 450 score distance)
-const PHASE_DURATION_SCORE = 450; 
+const PHASE_DURATION_SCORE = 600; 
 
 // --- Game State Variables ---
 let scene, camera, renderer, composer;
@@ -37,7 +35,6 @@ let currentSpeed = RUN_SPEED_BASE;
 let obstacles = [];
 let debrisParticles = []; 
 let floatingParticles; 
-// Removed: let loadingOverlay; 
 
 let timeSinceLastObstacle = 0; 
 
@@ -45,11 +42,7 @@ let timeSinceLastObstacle = 0;
 const playerCollisionBox = new THREE.Box3();
 const playerCollisionSize = new THREE.Vector3(LANE_WIDTH * 0.8, PLAYER_RUN_HEIGHT, 1);
 
-// --- Audio Placeholders (Kept Simple for GitHub Pages) ---
-// (Placeholder audio data is still present but commented out for execution simplicity)
-
-// --- Progression Management (TIME-BASED PHASES) ---
-
+// --- Progression Management (UNCHANGED CORE LOGIC) ---
 const PROGRESSION_STAGES = [
     { distance: 0, type: 'warmup', interval: 40 }, 
     { distance: PHASE_DURATION_SCORE * 1, type: 'jump_only', interval: 30 }, 
@@ -71,7 +64,6 @@ class ProgressionManager {
             
             this.currentStageIndex++;
             this.currentStage = PROGRESSION_STAGES[this.currentStageIndex];
-            console.log(`Advanced to Stage: ${this.currentStage.type} at Score ${Math.floor(score)}`);
         }
     }
 
@@ -86,7 +78,8 @@ let progressionManager = new ProgressionManager();
 // --- Initialization Functions ---
 function initThreeJS() {
     scene = new THREE.Scene();
-    scene.fog = new THREE.Fog(0x445566, 10, 150); 
+    // Cold Blue Sky Fog
+    scene.fog = new THREE.Fog(0x87ceeb, 20, 180); 
 
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(LANES[currentLane], PLAYER_RUN_HEIGHT, 0);
@@ -95,14 +88,14 @@ function initThreeJS() {
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.0;
+    renderer.toneMappingExposure = 1.2; 
     document.body.appendChild(renderer.domElement);
     
-    // Post-processing (Bloom for Christmas Lights/Glow)
+    // Post-processing (Bloom - increased intensity for glow/lights)
     const renderPass = new RenderPass(scene, camera);
-    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+    const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 2.0, 0.5, 0.9);
     bloomPass.threshold = 0.2;
-    bloomPass.strength = 1.5; 
+    bloomPass.strength = 2.0; 
     bloomPass.radius = 0.5;
     
     composer = new EffectComposer(renderer);
@@ -119,44 +112,84 @@ function onWindowResize() {
     composer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// --- Environment & Assets (Snowy Theme) ---
+// --- Environment & Assets (Christmas Stylized Theme) ---
 function createEnvironment() {
-    const ROAD_LENGTH = 100;
+    const ROAD_LENGTH = 150; 
     const ROAD_WIDTH = LANE_WIDTH * 3 + 2;
     
-    const roadMaterial = new THREE.MeshLambertMaterial({ color: 0x99aacc, });
-    const shoulderMaterial = new THREE.MeshLambertMaterial({ color: 0xeeeeee, });
+    // Road Material: Icy White/Blue Look (alternating lanes)
+    const roadMaterialWhite = new THREE.MeshLambertMaterial({ color: 0xeeeeee }); 
+    const roadMaterialBlue = new THREE.MeshLambertMaterial({ color: 0xaaeeff }); 
+    
+    // Shoulder Material: Brown Earth Walls
+    const shoulderMaterial = new THREE.MeshLambertMaterial({ color: 0x964b00 }); 
 
     for (let i = 0; i < 3; i++) {
         const chunk = new THREE.Group();
         chunk.position.z = -i * ROAD_LENGTH;
         
-        const roadGeo = new THREE.PlaneGeometry(ROAD_WIDTH, ROAD_LENGTH);
-        const roadMesh = new THREE.Mesh(roadGeo, roadMaterial);
-        roadMesh.rotation.x = -Math.PI / 2;
-        roadMesh.position.y = 0.01;
-        chunk.add(roadMesh);
+        // Road Surface (Alternating light/dark lanes)
+        for (let l = 0; l < LANES.length; l++) {
+            const laneGeo = new THREE.PlaneGeometry(LANE_WIDTH, ROAD_LENGTH);
+            const laneMat = (l % 2 === 0) ? roadMaterialWhite : roadMaterialBlue;
+            const laneMesh = new THREE.Mesh(laneGeo, laneMat);
+            laneMesh.rotation.x = -Math.PI / 2;
+            laneMesh.position.set(LANES[l], 0.01, 0);
+            chunk.add(laneMesh);
+        }
         
-        for (let l = 0; l < LANES.length - 1; l++) {
-            const markerGeo = new THREE.PlaneGeometry(0.2, 5);
-            const markerMat = new THREE.MeshBasicMaterial({ 
-                color: 0xaaffff, emissive: 0xaaffff, emissiveIntensity: 5 
-            });
-            const markerMesh = new THREE.Mesh(markerGeo, markerMat);
-            markerMesh.rotation.x = -Math.PI / 2;
-            markerMesh.position.set(LANES[l] + LANE_WIDTH / 2, 0.02, 0);
-            chunk.add(markerMesh);
+        // Side Walls (Brown Banks with stripes from image reference)
+        const wallGeo = new THREE.BoxGeometry(1, 10, ROAD_LENGTH);
+        const wallMeshL = new THREE.Mesh(wallGeo, shoulderMaterial);
+        const wallMeshR = new THREE.Mesh(wallGeo, shoulderMaterial);
+        wallMeshL.position.set(-ROAD_WIDTH / 2, 5, 0);
+        wallMeshR.position.set(ROAD_WIDTH / 2, 5, 0);
+        chunk.add(wallMeshL);
+        chunk.add(wallMeshR);
+        
+        // --- Stylized Christmas Tree Assets ---
+        const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6e2c00 });
+        const foliageMat = new THREE.MeshLambertMaterial({ color: 0x38761d });
+        
+        for(let j = 0; j < 6; j++) {
+            const zPos = (j * 50) - (ROAD_LENGTH * 0.5);
+            
+            // Trunk
+            const trunkGeo = new THREE.CylinderGeometry(0.5, 0.5, 3, 8);
+            const trunkL = new THREE.Mesh(trunkGeo, trunkMat);
+            trunkL.position.set(-ROAD_WIDTH/2 - 2.5, 1.5, zPos);
+            
+            // Foliage (Stacked Cones for Tree Shape)
+            const foliageGeo1 = new THREE.ConeGeometry(2, 3, 12);
+            const foliageGeo2 = new THREE.ConeGeometry(3, 4, 12);
+            const foliageGeo3 = new THREE.ConeGeometry(4, 5, 12);
+            
+            const foliageL1 = new THREE.Mesh(foliageGeo1, foliageMat);
+            foliageL1.position.set(-ROAD_WIDTH/2 - 2.5, 3 + 1.5, zPos);
+            const foliageL2 = new THREE.Mesh(foliageGeo2, foliageMat);
+            foliageL2.position.set(-ROAD_WIDTH/2 - 2.5, 3 + 4, zPos);
+            
+            // Add a star at the top (Simple Glowing Light)
+            const starMat = new THREE.MeshBasicMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 5 });
+            const starGeo = new THREE.DodecahedronGeometry(0.5);
+            const starL = new THREE.Mesh(starGeo, starMat);
+            starL.position.set(-ROAD_WIDTH/2 - 2.5, 8.5, zPos);
+
+            chunk.add(trunkL, foliageL1, foliageL2, starL);
+            
+            // Duplicate for Right Side
+            const trunkR = trunkL.clone();
+            trunkR.position.x = ROAD_WIDTH/2 + 2.5;
+            const foliageR1 = foliageL1.clone();
+            foliageR1.position.x = ROAD_WIDTH/2 + 2.5;
+            const foliageR2 = foliageL2.clone();
+            foliageR2.position.x = ROAD_WIDTH/2 + 2.5;
+            const starR = starL.clone();
+            starR.position.x = ROAD_WIDTH/2 + 2.5;
+            
+            chunk.add(trunkR, foliageR1, foliageR2, starR);
         }
 
-        const shoulderGeo = new THREE.PlaneGeometry(10, ROAD_LENGTH);
-        const shoulderMeshL = new THREE.Mesh(shoulderGeo, shoulderMaterial);
-        const shoulderMeshR = new THREE.Mesh(shoulderGeo, shoulderMaterial);
-        shoulderMeshL.rotation.x = shoulderMeshR.rotation.x = -Math.PI / 2;
-        shoulderMeshL.position.set(-ROAD_WIDTH / 2 - 5, 0, 0);
-        shoulderMeshR.position.set(ROAD_WIDTH / 2 + 5, 0, 0);
-        chunk.add(shoulderMeshL);
-        chunk.add(shoulderMeshR);
-        
         scene.add(chunk);
     }
 
@@ -164,44 +197,33 @@ function createEnvironment() {
         c.userData.type = 'RoadChunk';
     });
 
-    scene.add(new THREE.AmbientLight(0xffffff, 0.2));
+    scene.add(new THREE.AmbientLight(0xffffff, 0.5));
     scene.add(new THREE.PointLight(0xffffff, 100).position.set(0, 10, 0));
 
     createFloatingParticles();
 }
 
 function createFloatingParticles() {
-    const particleCount = 500;
+    // Snow Particles
+    const particleCount = 1000;
     const geometry = new THREE.BufferGeometry();
     const positions = [];
-    const colors = [];
-    const color = new THREE.Color();
-
+    
     for (let i = 0; i < particleCount; i++) {
         positions.push(
-            (Math.random() - 0.5) * 100,
-            Math.random() * 20 + 5,      
-            (Math.random() - 0.5) * 200 - 100
+            (Math.random() - 0.5) * 150,
+            Math.random() * 30 + 5,      
+            (Math.random() - 0.5) * 300 - 150
         );
-        
-        if (Math.random() < 0.6) {
-            color.setHex(0xffffff);
-        } else if (Math.random() < 0.8) {
-            color.setHex(0x00aaff);
-        } else {
-            color.setHex(0xffdd00);
-        }
-        colors.push(color.r, color.g, color.b);
     }
 
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
     const material = new THREE.PointsMaterial({
-        size: 0.5,
-        vertexColors: true,
-        blending: THREE.AdditiveBlending,
+        color: 0xffffff, // White Snow
+        size: 0.3,
         transparent: true,
+        opacity: 0.7,
         sizeAttenuation: true,
         depthWrite: false
     });
@@ -210,10 +232,80 @@ function createFloatingParticles() {
     scene.add(floatingParticles);
 }
 
-// --- Game Logic ---
+// --- Obstacle Management (Updated to Christmas Objects) ---
+
+function createObstacle(lane, type) {
+    let geometry, material, height, isBreakable = false;
+    
+    switch (type) {
+        case 'jump': // Low Spiked Fence / Candy Cane Log (forces jump)
+            geometry = new THREE.CylinderGeometry(0.5, 0.5, LANE_WIDTH * 0.8, 16);
+            // Red/White Stripe Look for Candy Cane
+            const canvas = document.createElement('canvas');
+            canvas.width = 16; canvas.height = 16;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ff0000'; ctx.fillRect(0, 0, 8, 16);
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(8, 0, 8, 16);
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.repeat.set(10, 1);
+            
+            material = new THREE.MeshBasicMaterial({ 
+                map: texture, 
+                color: 0xffffff, 
+                emissive: 0xffffff, 
+                emissiveIntensity: 0.5
+            });
+            
+            height = 0.5;
+            break;
+            
+        case 'slide': // Hanging Lights/Wreath (forces slide)
+            geometry = new THREE.TorusGeometry(1, 0.2, 16, 50); // Wreath shape
+            material = new THREE.MeshBasicMaterial({ 
+                color: 0x00ff00, emissive: 0x00ff00, emissiveIntensity: 2
+            });
+            height = PLAYER_RUN_HEIGHT + 2.0;
+            break;
+            
+        case 'wall': // Giant Gift Box (forces dodge L/R)
+            geometry = new THREE.BoxGeometry(LANE_WIDTH * 0.8, 2, 2); 
+            material = new THREE.MeshLambertMaterial({ color: 0xdd2222 }); // Red box
+            height = 1.0;
+            break;
+            
+        case 'breakable': // Ice Wall / Gingerbread Wall (must be punched)
+            geometry = new THREE.BoxGeometry(LANE_WIDTH * 0.8, 2.5, 1);
+            material = new THREE.MeshBasicMaterial({ 
+                color: 0xffcc99, emissive: 0xffcc99, emissiveIntensity: 3 
+            });
+            height = 1.25;
+            isBreakable = true;
+            break;
+    }
+    
+    const mesh = new THREE.Mesh(geometry, material);
+    
+    if (type === 'jump') {
+        mesh.rotation.z = Math.PI / 2; // Candy Cane Log lies across the lane
+    }
+    
+    mesh.position.set(LANES[lane], height, OBSTACLE_SPAWN_Z);
+    
+    mesh.userData = { 
+        type: 'Obstacle', 
+        obstacleType: type,
+        isBreakable: isBreakable,
+        collided: false 
+    }; 
+    
+    obstacles.push(mesh);
+    scene.add(mesh);
+}
+
+// --- Game Logic, Player Actions, Collision, and Animation Loop (UNCHANGED CORE LOGIC) ---
 
 function initGame() {
-    // sfx.running.play(); 
     clock.start();
     startGameLoop();
 }
@@ -239,7 +331,6 @@ function resetGame() {
     document.getElementById('game-over-screen').classList.add('hidden');
     document.getElementById('score-counter').innerText = 'SCORE: 0';
     
-    // sfx.running.play(); 
     clock.start();
     startGameLoop();
 }
@@ -252,48 +343,33 @@ function startGameLoop() {
 function gameOver() {
     isGameOver = true;
     cancelAnimationFrame(gameLoopId);
-    // sfx.running.pause();
-
     document.getElementById('final-score').innerText = `Final Score: ${Math.floor(score)}`;
     document.getElementById('game-over-screen').classList.remove('hidden');
 }
 
-// --- Obstacle Management (The code for createObstacle, getObstacleTypeForStage, and generateObstacles remains exactly the same as the working progression logic) ---
+function moveLane(direction) {
+    if (isJumping || isGameOver) return; 
+    currentLane = Math.max(0, Math.min(2, currentLane + direction));
+}
 
-function createObstacle(lane, type) {
-    let geometry, material, height, isBreakable = false;
-    
-    switch (type) {
-        case 'jump': 
-            geometry = new THREE.BoxGeometry(LANE_WIDTH * 0.8, 1, 1);
-            material = new THREE.MeshBasicMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 2 });
-            height = 0.5;
-            break;
-        case 'slide': 
-            geometry = new THREE.BoxGeometry(LANE_WIDTH * 0.8, 1, 1);
-            material = new THREE.MeshBasicMaterial({ color: 0x008800, emissive: 0x008800, emissiveIntensity: 2 });
-            height = PLAYER_RUN_HEIGHT + 0.5;
-            break;
-        case 'wall': 
-            geometry = new THREE.BoxGeometry(LANE_WIDTH * 0.8, 1.5, 1);
-            material = new THREE.MeshBasicMaterial({ color: 0xddddff, emissive: 0xddddff, emissiveIntensity: 1 });
-            height = 0.75;
-            break;
-        case 'breakable': 
-            geometry = new THREE.BoxGeometry(LANE_WIDTH * 0.8, 2.5, 1);
-            material = new THREE.MeshBasicMaterial({ color: 0x88cccc, emissive: 0x88cccc, emissiveIntensity: 2.5 });
-            height = 1.25;
-            isBreakable = true;
-            break;
-    }
-    
-    const mesh = new THREE.Mesh(geometry, material);
-    mesh.position.set(LANES[lane], height, OBSTACLE_SPAWN_Z);
-    
-    mesh.userData = { type: 'Obstacle', obstacleType: type, isBreakable: isBreakable, collided: false }; 
-    
-    obstacles.push(mesh);
-    scene.add(mesh);
+function jump() {
+    if (isJumping || isSliding || isGameOver) return;
+    isJumping = true;
+    jumpStartTime = clock.getElapsedTime();
+}
+
+function slide() {
+    if (isJumping || isSliding || isGameOver) return;
+    isSliding = true;
+    slideStartTime = clock.getElapsedTime();
+    setTimeout(() => { isSliding = false; }, 1000); 
+}
+
+function punch() {
+    if (isPunching || isGameOver) return;
+    isPunching = true;
+    punchStartTime = clock.getElapsedTime();
+    setTimeout(() => { isPunching = false; }, 300);
 }
 
 function getObstacleTypeForStage(stageType) {
@@ -340,33 +416,6 @@ function generateObstacles(delta) {
     blockedLanes.forEach(lane => {
         createObstacle(lane, typeToSpawn);
     });
-}
-
-// --- Player Actions, Collision, and Update Logic (All remain the same as the final working version) ---
-
-function jump() {
-    if (isJumping || isSliding || isGameOver) return;
-    isJumping = true;
-    jumpStartTime = clock.getElapsedTime();
-}
-
-function slide() {
-    if (isJumping || isSliding || isGameOver) return;
-    isSliding = true;
-    slideStartTime = clock.getElapsedTime();
-    setTimeout(() => { isSliding = false; }, 1000); 
-}
-
-function punch() {
-    if (isPunching || isGameOver) return;
-    isPunching = true;
-    punchStartTime = clock.getElapsedTime();
-    setTimeout(() => { isPunching = false; }, 300);
-}
-
-function moveLane(direction) {
-    if (isJumping || isGameOver) return; 
-    currentLane = Math.max(0, Math.min(2, currentLane + direction));
 }
 
 function checkCollisions() {
@@ -494,12 +543,12 @@ function animate() {
     
     scene.children.filter(c => c.userData.type === 'RoadChunk').forEach(chunk => {
         chunk.position.z += distance;
-        if (chunk.position.z >= 0) {
-            let maxZ = 0;
+        if (chunk.position.z >= 50) { 
+            let minZ = 0;
             scene.children.filter(c => c.userData.type === 'RoadChunk').forEach(other => {
-                maxZ = Math.min(maxZ, other.position.z);
+                minZ = Math.min(minZ, other.position.z);
             });
-            chunk.position.z = maxZ - 100;
+            chunk.position.z = minZ - 150; 
         }
     });
 
@@ -520,7 +569,7 @@ function animate() {
         const positions = floatingParticles.geometry.attributes.position.array;
         for (let i = 2; i < positions.length; i += 3) {
             positions[i] += distance * 0.5;
-            if (positions[i] > 10) positions[i] = -200; 
+            if (positions[i] > 10) positions[i] = -300; 
         }
         floatingParticles.geometry.attributes.position.needsUpdate = true;
         floatingParticles.rotation.y += 0.0005;
@@ -537,7 +586,7 @@ function animate() {
     composer.render();
 }
 
-// --- Event Handlers (Keyboard + Touch) ---
+// --- Event Handlers (Unchanged) ---
 document.addEventListener('keydown', (e) => {
     if (isGameOver || isPaused) return;
     switch (e.key) {
@@ -556,7 +605,6 @@ document.getElementById('right-button').addEventListener('click', () => moveLane
 document.getElementById('punch-button').addEventListener('click', punch);
 document.getElementById('restart-button').addEventListener('click', resetGame);
 
-// Pause button logic (remains the same)
 document.getElementById('pause-button').addEventListener('click', () => {
     isPaused = !isPaused;
     const icon = document.getElementById('pause-button').querySelector('i');
@@ -595,8 +643,7 @@ document.addEventListener('keyup', (e) => {
 });
 
 // --- Kickoff (INSTANT START) ---
-// This is the cleanest, most reliable way to start the game when restricted to static GitHub files.
 initThreeJS();
 createEnvironment(); 
 document.getElementById('game-over-screen').classList.add('hidden');
-initGame(); 
+initGame();
